@@ -1,9 +1,41 @@
+# Alexander Ireland – 40292168
+# INSE6220 - Fall 2023
+# Special Note: Python code, created in collaboration with ChatGTP **
+#
+# Body Mass Index Classification using Principal Component Analysis and Machine Learning
+#
+# The code performed the data analysis generates the plots related to the analysis and PCA plots
+# it also outputs a datafile PCA_output.csv that is used as the input to machineLearning.py
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from scipy.stats import probplot
+
+
+def biplot(scores, loadings, labels=None, colors=None):
+    xs = scores[:, 0]
+    ys = scores[:, 1]
+    n = loadings.shape[0]
+
+    scalex = 1.0 / (xs.max() - xs.min())
+    scaley = 1.0 / (ys.max() - ys.min())
+
+    if colors is not None:
+        plt.scatter(xs * scalex, ys * scaley, c=colors, cmap='viridis')
+    else:
+        plt.scatter(xs * scalex, ys * scaley)
+
+    for i in range(n):
+        plt.arrow(0, 0, loadings[i, 0], loadings[i, 1], color='r', alpha=0.5)
+        if labels is not None:
+            plt.text(loadings[i, 0] * 1.15, loadings[i, 1] * 1.15, labels[i], color='g', ha='center', va='center')
+
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.grid()
 
 # Load dataset
 print("Loading raw dataset...")
@@ -44,14 +76,14 @@ plt.title('Box Plot of BMI')
 plt.ylabel('BMI')
 plt.show()
 
-# Drop the 42nd data point (row 43, index 41)
+# Drop the 42nd data point (row 43, index 41) because its height is likely erroneous
 df = df.drop(index=41)
-# For ease of debugging, create the
-df.to_csv('temp.csv', index=False)
 
-# Load modified dataset
-print("Loading raw dataset...")
-df = pd.read_csv('temp.csv')
+# ensure df works properly for hte rest of hte script
+df.reset_index(drop=True, inplace=True)
+
+# output the processed data to a file for debugging purposes
+# df.to_csv('processed_dataset.csv', index=False)
 
 # Box plot of the data in column 16 (index 15) without the problematic data point
 print("Creating box plot for BMI without erronous data...")
@@ -108,26 +140,11 @@ plt.colorbar(label='Class')
 plt.title('2D Scatter Plot of the first two Principal Components')
 plt.show()
 
-# Apply PCA for the third principal component analysis
-print("Applying PCA for PC3 analysis...")
-pca_3 = PCA(n_components=3)
-principal_components_3 = pca_3.fit_transform(scaled_data)
-
-# Scatter Plot for the third principal component and Column 17
-print("Creating scatter plot for PC3 and Column 17...")
-plt.figure(figsize=(12, 8))
-plt.scatter(principal_components_3[:, 2], range(len(principal_components_3)), c=df.iloc[:, 16], cmap='viridis', alpha=0.7)
-plt.xlabel('Principal Component 3')
-plt.ylabel('Index')
-plt.colorbar(label='Class')
-plt.title('Scatter Plot of PC3 with Colorization by Class')
-plt.show()
-
 # Scree Plot with Variance Explained in Percent
 print("Generating scree plot...")
 pca_all = PCA(n_components=0.999
               )
-pca_all.fit_transform(scaled_data)
+principal_components_all = pca_all.fit_transform(scaled_data)
 explained_variance_percent = pca_all.explained_variance_ratio_ * 100  # Convert to percent
 plt.figure(figsize=(10, 6))
 plt.plot(range(1, pca_all.n_components_ + 1), explained_variance_percent, 'o-', linewidth=2, color='blue')
@@ -138,6 +155,14 @@ plt.xticks(range(1, pca_all.n_components_ + 1))
 plt.grid(True)
 plt.show()
 
+# Create a biplot
+plt.figure(figsize=(12, 7))
+biplot(principal_components_all[:, :2], pca_all.components_, labels=df.columns[1:12])
+plt.title('Biplot of the first two Principal Components')
+plt.show()
+
+
+
 # Save the first two principal components and Column 17 to a CSV file
 print("Saving the first two principal components and the classification column to CSV file...")
 pca_df = pd.DataFrame(principal_components_2d, columns=['PC1', 'PC2'])
@@ -145,41 +170,9 @@ pca_df['class'] = df.iloc[:, 16]  # Add Column 17
 pca_df.to_csv('PCA_output.csv', index=False)
 print("The first two principal components and the classification column saved to PCA_output.csv")
 
-# Save the first two principal components and Column 17 to a CSV file
-print("Saving the first two principal components and the classification column to CSV file...")
-pca_df = pd.DataFrame(principal_components_3, columns=['PC1', 'PC2', 'PC3'])
-pca_df['class'] = df.iloc[:, 16]  # Add Column 17
-pca_df.to_csv('PCA_output3.csv', index=False)
-print("The first two principal components and the classification column saved to PCA_output.csv")
-
-# Grouping by the class variable and calculating the mean and standard deviation for each PC
-grouped_stats = pca_df.groupby('class')[['PC1', 'PC2', 'PC3']].agg(['median', 'std'])
-
-print("Mean and Standard Deviation of each Principal Component for each class:")
-print(grouped_stats)
-
-
-# Assuming 'grouped_stats' is your DataFrame with medians and standard deviations
-# Reset index if not already done
-grouped_stats = grouped_stats.reset_index()
-
-# Flatten the MultiIndex for ease of use
-grouped_stats.columns = [' '.join(col).strip() for col in grouped_stats.columns.values]
-
-# Reshape the DataFrame for easier plotting
-melted_stats = grouped_stats.melt(id_vars='class', value_vars=['PC1 median', 'PC1 std', 'PC2 median', 'PC2 std', 'PC3 median', 'PC3 std'])
-split_columns = melted_stats['variable'].str.split(' ', n=1, expand=True)
-melted_stats['PC'] = split_columns[0]
-melted_stats['Statistic'] = split_columns[1]
-
-# Filter out standard deviation rows for plotting
-median_stats = melted_stats[melted_stats['Statistic'] == 'median']
-
-# Create a bar plot
-plt.figure(figsize=(10, 6))
-sns.barplot(data=median_stats, x='PC', y='value', hue='class', palette='Set2')
-plt.title('Median of Principal Components by Class')
-plt.xlabel('Principal Components')
-plt.ylabel('Median Value')
-plt.legend(title='Class')
+# Create a biplot with colorized points
+plt.figure(figsize=(12, 7))
+biplot(principal_components_all[:, :2], pca_all.components_, labels=df.columns[1:12], colors=pca_df['class'])
+plt.title('Biplot of the first two Principal Components with Colorized Points')
+plt.colorbar(label='Class')
 plt.show()
